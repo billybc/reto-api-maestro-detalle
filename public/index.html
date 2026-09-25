@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Tablero - Reto API Maestro-Detalle</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:#f4f6fb; color:#1c2333; }
+  header { background:#1e3a8a; color:#fff; padding:24px 32px; }
+  header h1 { margin:0; font-size:1.6rem; }
+  header p { margin:4px 0 0; opacity:.85; }
+  main { padding:24px 32px; max-width:1100px; margin:0 auto; }
+  .cards { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
+  .card { background:#fff; border-radius:10px; padding:16px 20px; box-shadow:0 1px 3px rgba(0,0,0,.08); flex:1; min-width:200px; }
+  .card h3 { margin:0 0 6px; font-size:.85rem; color:#64748b; text-transform:uppercase; }
+  .card .value { font-size:1.6rem; font-weight:700; }
+  table { width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  th, td { padding:10px 14px; text-align:left; border-bottom:1px solid #eef0f5; font-size:.92rem; }
+  th { background:#1e293b; color:#fff; }
+  .bar-bg { background:#e2e8f0; border-radius:6px; height:18px; width:140px; overflow:hidden; }
+  .bar-fill { background:#16a34a; height:100%; text-align:center; color:#fff; font-size:.72rem; line-height:18px; }
+  .badge { padding:3px 10px; border-radius:999px; font-size:.75rem; font-weight:600; }
+  .badge.ok { background:#dcfce7; color:#16a34a; }
+  .badge.pending { background:#fef9c3; color:#a16207; }
+  #buscar { padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; width:280px; margin-bottom:12px; }
+  #estadoConexion { font-size:.85rem; color:#94a3b8; margin-top:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tablero de Misiones</h1>
+  <p>Reto: API Maestro-Detalle con Catálogo y Control de Estado</p>
+</header>
+<main>
+  <div class="cards">
+    <div class="card"><h3>Estudiantes registrados</h3><div class="value" id="totalEstudiantes">-</div></div>
+    <div class="card"><h3>Promedio de cumplimiento</h3><div class="value" id="promedio">-</div></div>
+    <div class="card"><h3>Total de misiones</h3><div class="value" id="totalMisiones">-</div></div>
+  </div>
+
+  <input id="buscar" type="text" placeholder="Buscar por carné o nombre...">
+
+  <table>
+    <thead>
+      <tr><th>Carné</th><th>Estudiante</th><th>Correo</th><th>Progreso</th><th>% Avance</th><th>Estado</th></tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <p id="estadoConexion"></p>
+</main>
+
+<script>
+let estudiantes = [];
+let totalMisiones = 0;
+
+async function cargar() {
+  const estadoEl = document.getElementById("estadoConexion");
+  try {
+    const [rEst, rMis] = await Promise.all([
+      fetch("/api/estudiantes"),
+      fetch("/api/misiones"),
+    ]);
+    if (!rEst.ok || !rMis.ok) throw new Error("La API respondió con un error.");
+    estudiantes = await rEst.json();
+    const misiones = await rMis.json();
+    totalMisiones = misiones.length;
+    document.getElementById("totalMisiones").textContent = totalMisiones;
+    estadoEl.textContent = "";
+    render();
+  } catch (err) {
+    estadoEl.textContent = "No se pudo conectar con la API/base de datos: " + err.message;
+  }
+}
+
+function render(filtro = "") {
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = "";
+
+  const filtrados = estudiantes.filter(
+    (e) =>
+      e.carnet.toLowerCase().includes(filtro) ||
+      (e.nombre || "").toLowerCase().includes(filtro)
+  );
+
+  let sumaPorcentaje = 0;
+
+  filtrados.forEach((e) => {
+    const completadas = e.misiones.filter((m) => m.estado).length;
+    const porcentaje = totalMisiones > 0 ? Math.round((completadas / totalMisiones) * 100) : 0;
+    sumaPorcentaje += porcentaje;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${e.carnet}</td>
+      <td>${e.nombre}</td>
+      <td>${e.correo}</td>
+      <td>${completadas} / ${totalMisiones}</td>
+      <td>
+        <div class="bar-bg"><div class="bar-fill" style="width:${porcentaje}%">${porcentaje}%</div></div>
+      </td>
+      <td><span class="badge ${porcentaje === 100 ? "ok" : "pending"}">${
+        porcentaje === 100 ? "Completado" : "En progreso"
+      }</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById("totalEstudiantes").textContent = estudiantes.length;
+  document.getElementById("promedio").textContent =
+    filtrados.length > 0 ? (sumaPorcentaje / filtrados.length).toFixed(1) + "%" : "0%";
+}
+
+document.getElementById("buscar").addEventListener("input", (e) => {
+  render(e.target.value.trim().toLowerCase());
+});
+
+cargar();
+</script>
+</body>
+</html>
